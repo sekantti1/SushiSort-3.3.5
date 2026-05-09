@@ -477,7 +477,20 @@ local function CreateSortCheck(name, parent, x, y)
 
     parent.sortButton = CreateFrame("CheckButton", name, parent, "SOCDCheckTemplate");
     parent.sortButton.parentFrame = parent;
-    parent.sortButton:SetChecked(true);
+    print(name)
+        -- Restore saved state, default to true if no saved value
+    if SOCD.checks == nil then SOCD.checks = {}; end
+    local saved = SOCD.checks[name];
+    if saved == nil then saved = true; end
+    parent.sortButton:SetChecked(saved);
+
+    -- Save state on toggle
+    parent.sortButton:SetScript("OnClick", function(self)
+        if SOCD.checks == nil then SOCD.checks = {}; end
+        SOCD.checks[name] = (self:GetChecked() ~= nil);
+    end);
+
+
 	parent.sortButton.tooltipText = "Include this bag when sorting?";
     parent.sortButton:ClearAllPoints();
     parent.sortButton:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y);
@@ -517,10 +530,11 @@ function SOCD_MainFrame_OnLoad(self)
         Log("(SOCD ~= nil and SOCD.IsEnabled ~= nil)");
         fEnable = SOCD.IsEnabled;
     end
-
+    local savedChecks = SOCD and SOCD.checks or {};
     SOCD = {};
     Log("SOCD = {};");
     SOCD.IsEnabled = fEnable;
+    SOCD.checks = savedChecks;
     Log("SOCD.IsEnabled = "..tostring(SOCD.IsEnabled));
 
     L = 
@@ -598,6 +612,24 @@ function SOCD_MainFrame_OnEvent(self, event, ...)
     elseif(event == "VARIABLES_LOADED") then
         Log("(event == VARIABLES_LOADED)");
         InterfaceOptions_AddCategory(SOCD_OptionsPanel);
+
+        -- Restore checkbox states now that SavedVariables are loaded
+        if SOCD.checks == nil then SOCD.checks = {}; end
+        for i=1, NUM_CONTAINER_FRAMES, 1 do
+            local name = "ContainerFrame"..i.."SortCheck";
+            local cb = _G[name];
+            if cb ~= nil then
+                local saved = SOCD.checks[name];
+                if saved == nil then saved = true; end
+                cb:SetChecked(saved);
+            end
+        end
+        local bankCb = _G["BankFrameSortCheck"];
+        if bankCb ~= nil then
+            local saved = SOCD.checks["BankFrameSortCheck"];
+            if saved == nil then saved = true; end
+            bankCb:SetChecked(saved);
+        end
 	end
 end
 

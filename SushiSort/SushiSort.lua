@@ -151,7 +151,7 @@ local function CompareItems(lItem, rItem)
         return (lItem.name < rItem.name);
     elseif ((lItem.count) ~= (rItem.count)) then
         Log("((lItem.count) ~= (rItem.count))");
-        return ((lItem.count) >= (rItem.count));
+        return ((lItem.count) <= (rItem.count));
     else
         Log("return true");
         return true;

@@ -165,6 +165,97 @@ local function BeginSort()
     ClearCursor();
 end
 
+local function CombineStacks(bag)
+    Log("CombineStacks()");
+ 
+    -- Build a list of partial stacks per item id (skip empty slots and full stacks)
+    local partials = {};
+    for i = 1, #bag, 1 do
+        local item = bag[i];
+        if item.id ~= nil and item.maxStack ~= nil and item.maxStack > 1 and item.count < item.maxStack then
+            if partials[item.id] == nil then
+                partials[item.id] = {};
+            end
+            table.insert(partials[item.id], i);
+        end
+    end
+ 
+    -- For each item that has more than one partial stack, generate combine moves
+    for id, indices in pairs(partials) do
+        if #indices > 1 then
+            Log("Combining "..#indices.." partial stacks of item "..id);
+ 
+            -- Sort indices so we fill from the front of the bag first (lowest index = target)
+            table.sort(indices);
+ 
+            local ti = 1; -- target pointer
+            local si = #indices; -- source pointer (drain from the back)
+ 
+            while ti < si do
+                local target = bag[indices[ti]];
+                local source = bag[indices[si]];
+ 
+                if target.count >= target.maxStack then
+                    -- Target is now full, advance target pointer
+                    ti = ti + 1;
+                elseif source.count <= 0 then
+                    -- Source is now empty (virtually), retreat source pointer
+                    si = si - 1;
+                else
+                    local space = target.maxStack - target.count;
+                    local moved = math.min(space, source.count);
+ 
+                    Log("Combine: move "..moved.." of "..source.name.." from slot "..source.slot.." to slot "..target.slot);
+ 
+                    -- Only queue the move if it actually moves everything from source
+                    -- (WoW 3.3.5 PickupContainerItem on a partial stack just picks up the whole stack;
+                    --  placing it on same-item slot will auto-combine up to maxStack.
+                    --  We queue a swap move here; the client will combine automatically.)
+                    if moved == source.count then
+                        -- Source will be emptied: queue as a normal move
+                        local move = {};
+                        move.id = source.id;
+                        move.name = source.name;
+                        move.sourcebag = source.bag;
+                        move.sourcetab = source.tab;
+                        move.sourceslot = source.slot;
+                        move.targetbag = target.bag;
+                        move.targettab = target.tab;
+                        move.targetslot = target.slot;
+                        table.insert(moves, 1, move); -- prepend so combines happen before sort moves
+                        Log("Queued combine move "..source.name.." from slot "..source.slot.." to slot "..target.slot);
+ 
+                        -- Update virtual counts
+                        target.count = target.count + moved;
+                        source.count = 0;
+                        source.id = nil; -- treat as empty so sort places items here
+                        source.name = "<EMPTY>";
+                        si = si - 1;
+                    else
+                        -- Source won't be fully drained; just advance target (it'll be full after)
+                        -- Queue the move anyway — WoW will combine and leave remainder on source
+                        local move = {};
+                        move.id = source.id;
+                        move.name = source.name;
+                        move.sourcebag = source.bag;
+                        move.sourcetab = source.tab;
+                        move.sourceslot = source.slot;
+                        move.targetbag = target.bag;
+                        move.targettab = target.tab;
+                        move.targetslot = target.slot;
+                        table.insert(moves, 1, move);
+                        Log("Queued partial combine move "..source.name.." from slot "..source.slot.." to slot "..target.slot);
+ 
+                        source.count = source.count - moved;
+                        target.count = target.maxStack;
+                        ti = ti + 1;
+                    end
+                end
+            end
+        end
+    end
+end
+ 
 local function SortBag(bag)
     Log("SortBag(bag)");
     
@@ -237,7 +328,7 @@ local function CreateBagFromID(bagID)
         item.id = GetIDFromLink(link);
         if (item.id ~= nil) then
             item.count = count;
-            item.name, _, item.quality, _, _, item.class, item.subclass, _, item.type, _, item.price = GetItemInfo(item.id);
+            item.name, _, item.quality, _, _, item.class, item.subclass, item.maxStack, item.type, _, item.price = GetItemInfo(item.id);
         end
 
         Log("item = "..item.name);
@@ -268,7 +359,7 @@ local function CreateBagFromTab(tab)
         item.id = GetIDFromLink(link);
         if (item.id ~= nil) then
             item.count = count;
-            item.name, _, item.quality, _, _, item.class, item.subclass, _, item.type, _, item.price = GetItemInfo(item.id);
+            item.name, _, item.quality, _, _, item.class, item.subclass, item.maxStack, item.type, _, item.price = GetItemInfo(item.id);
         end
         table.insert(bag, item);
 
@@ -313,6 +404,7 @@ local function SOCD_BagSortButton(self)
     for k,v in pairs(bags) do
 	    if v ~= nil then
             Log("k = "..k..", v ~= nli");
+            CombineStacks(v);
 	        SortBag(v);
 	    end   
     end        
@@ -361,6 +453,7 @@ local function SOCD_BankSortButton(self)
     for k,v in pairs(bags) do
 	    if v ~= nil then
             Log("k = "..k..", v ~= nli");
+            CombineStacks(v);
 	        SortBag(v);
 	    end   
     end        
@@ -373,6 +466,8 @@ local function SOCD_GuildSortButton(self)
 
     Log("SOCD_GuildSortButton(self)");
     local bag = CreateBagFromTab(GetCurrentGuildBankTab());
+    BeginSort();
+    CombineStacks(bag);
     SortBag(bag);
     frame:Show();
 end
@@ -555,4 +650,3 @@ end
 
 SLASH_SUSHISORT1 = "/SS";
 SlashCmdList["SUSHISORT"] = SOCD_SlashCommand;
-

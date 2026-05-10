@@ -477,7 +477,6 @@ local function CreateSortCheck(name, parent, x, y)
 
     parent.sortButton = CreateFrame("CheckButton", name, parent, "SOCDCheckTemplate");
     parent.sortButton.parentFrame = parent;
-    print(name)
         -- Restore saved state, default to true if no saved value
     if SOCD.checks == nil then SOCD.checks = {}; end
     local saved = SOCD.checks[name];
